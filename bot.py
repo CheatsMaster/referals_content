@@ -1,9 +1,4 @@
 #!/usr/bin/env python3
-"""
-Telegram Bot - Complete Working Version
-Включает: бота, бэкапы в B2, healthcheck для Railway
-"""
-
 import asyncio
 import logging
 import os
@@ -278,3 +273,4 @@ if __name__ == "__main__":
         traceback.print_exc()
     
     print("\n👋 Завершение работы...")
+
