@@ -11,24 +11,6 @@ from aiogram.filters import Command
 
 from config import BOT_TOKEN, ADMIN_IDS, GLOBAL_CHANNEL, DB_PATH
 
-# Настройка логирования
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
-)
-logger = logging.getLogger(__name__)
-
-# Теперь это сработает:
-backup_router = Router()
-
-@backup_router.message(Command("backup_status"))
-async def cmd_backup_status(message: types.Message):
-    """Показать статус бэкапов"""
-    if message.from_user.id not in ADMIN_IDS:
-        await message.answer("⛔ У вас нет прав")
-        return
-    await message.answer("✅ Бэкапы работают (каждый час в B2)")
-
 async def main():
     """Основная функция запуска бота"""
     
@@ -81,5 +63,6 @@ if __name__ == "__main__":
         logger.info("Бот остановлен")
     except Exception as e:
         logger.error(f"Ошибка при запуске бота: {e}")
+
 
 
