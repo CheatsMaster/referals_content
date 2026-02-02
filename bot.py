@@ -1,12 +1,8 @@
 # ДОБАВЬТЕ ЭТО ПЕРЕД ВСЕМ
 import sys
 import os
+from aiogram import types
 
-# Принудительно добавляем types в глобальное пространство имен
-from aiogram import types as aiogram_types
-sys.modules['types'] = aiogram_types  # Магия для исправления импорта
-
-# Теперь обычные импорты
 import asyncio
 import logging
 from aiogram import Bot, Dispatcher, Router
@@ -85,4 +81,5 @@ if __name__ == "__main__":
         logger.info("Бот остановлен")
     except Exception as e:
         logger.error(f"Ошибка при запуске бота: {e}")
+
 
