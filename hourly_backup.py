@@ -19,7 +19,7 @@ def backup():
     try:
         # Конфигурация
         key_id = os.getenv('B2_KEY_ID')
-        app_key = os.getenv('B2_APP_KEY')
+        app_key = os.getenv('B2_APPLICATION_KEY')
         bucket = os.getenv('B2_BUCKET', 'referals-content')
         db_path = os.getenv('DB_PATH', 'bot_database.db')
         
