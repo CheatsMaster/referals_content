@@ -10,6 +10,13 @@ from aiogram.filters import Command
 
 from config import BOT_TOKEN, ADMIN_IDS, GLOBAL_CHANNEL, DB_PATH
 
+logger = logging.getLogger(__name__)
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
+)
+
 async def main():
     """Основная функция запуска бота"""
     
@@ -62,6 +69,7 @@ if __name__ == "__main__":
         logger.info("Бот остановлен")
     except Exception as e:
         logger.error(f"Ошибка при запуске бота: {e}")
+
 
 
 
