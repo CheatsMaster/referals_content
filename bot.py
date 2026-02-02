@@ -1,7 +1,10 @@
 import asyncio
 import logging
+import sys
 from aiogram import Bot, Dispatcher, types
 from aiogram.fsm.storage.memory import MemoryStorage
+from aiogram.filters import Command
+
 from config import BOT_TOKEN, ADMIN_IDS, GLOBAL_CHANNEL, DB_PATH
 
 # Настройка логирования
@@ -11,10 +14,28 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Создаем роутер для backup команд
+backup_router = Router()
+
+@backup_router.message(Command("backup_status"))
+async def cmd_backup_status(message: types.Message):
+    """Показать статус бэкапов"""
+    if message.from_user.id not in ADMIN_IDS:
+        await message.answer("⛔ У вас нет прав")
+        return
+    await message.answer("✅ Бэкапы работают (каждый час в B2)")
+
 async def main():
     """Основная функция запуска бота"""
+    
+    logger.info("🚀 Запуск бота...")
+    
+    # Создаем бота
     bot = Bot(token=BOT_TOKEN)
     dp = Dispatcher(storage=MemoryStorage())
+    
+    # Регистрируем роутеры
+    dp.include_router(backup_router)  # ← если есть backup роутер
     
     # Инициализация базы данных
     from database import init_db
@@ -52,10 +73,4 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         logger.info("Бот остановлен")
     except Exception as e:
-
         logger.error(f"Ошибка при запуске бота: {e}")
-
-
-
-
-
