@@ -28,7 +28,7 @@ class B2Backup:
         self.b2_key_id = os.getenv('B2_KEY_ID')
         self.b2_app_key = os.getenv('B2_APP_KEY')
         self.b2_bucket = os.getenv('B2_BUCKET', 'telegram-bot-backups')
-        self.endpoint_url = 'https://s3.us-west-002.backblazeb2.com'
+        self.endpoint_url = 'https://s3.us-east-005.backblazeb2.com'
         
         # Локальные пути
         self.db_path = os.getenv('DB_PATH', 'bot_database.db')
