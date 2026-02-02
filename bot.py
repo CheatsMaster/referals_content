@@ -1,7 +1,6 @@
 import asyncio
 import logging
 import sys
-import os
 
 # Импорт aiogram
 from aiogram import Bot, Dispatcher
@@ -20,6 +19,28 @@ logger = logging.getLogger(__name__)
 async def main():
     """Основная функция запуска бота"""
     
+    # ==================== HEALTHCHECK СЕРВЕР ====================
+    from aiohttp import web
+    
+    async def health_handler(request):
+        return web.Response(text='OK')
+    
+    async def start_health_server():
+        app = web.Application()
+        app.router.add_get('/health', health_handler)
+        runner = web.AppRunner(app)
+        await runner.setup()
+        site = web.TCPSite(runner, '0.0.0.0', 8080)
+        await site.start()
+        logger.info("✅ Healthcheck сервер запущен на порту 8080")
+        # Бесконечный цикл
+        while True:
+            await asyncio.sleep(3600)
+    
+    # Запускаем health сервер
+    health_task = asyncio.create_task(start_health_server())
+    
+    # ==================== ОСНОВНОЙ КОД БОТА ====================
     logger.info("🚀 Запуск бота...")
     
     # Проверка токена
@@ -52,9 +73,6 @@ async def main():
     except ImportError as e:
         logger.error(f"❌ Ошибка импорта хендлеров: {e}")
         return
-    except AttributeError as e:
-        logger.error(f"❌ Ошибка в хендлерах: {e}")
-        return
     
     # Настройка команд бота
     try:
@@ -86,6 +104,13 @@ async def main():
         logger.info("🛑 Бот остановлен")
     except Exception as e:
         logger.error(f"💥 Ошибка при запуске бота: {e}")
+    finally:
+        # Отменяем health task
+        health_task.cancel()
+        try:
+            await health_task
+        except asyncio.CancelledError:
+            pass
 
 if __name__ == "__main__":
     try:
