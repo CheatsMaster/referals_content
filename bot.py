@@ -2,8 +2,10 @@ import asyncio
 import logging
 from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
+import os
+from dotenv import load_dotenv
 
-from config import BOT_TOKEN
+BOT_TOKEN = os.getenv("BOT_TOKEN")
 
 # Настройка логирования
 logging.basicConfig(
@@ -53,4 +55,5 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         logger.info("Бот остановлен")
     except Exception as e:
+
         logger.error(f"Ошибка при запуске бота: {e}")
