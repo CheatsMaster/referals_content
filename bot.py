@@ -1,15 +1,42 @@
 import asyncio
 import logging
 import sys
+import threading
+from http.server import HTTPServer, BaseHTTPRequestHandler
 
-# Импорт aiogram
+# Простой HTTP сервер для healthcheck
+class HealthHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        if self.path == '/health':
+            self.send_response(200)
+            self.send_header('Content-type', 'text/plain')
+            self.end_headers()
+            self.wfile.write(b'OK')
+        else:
+            self.send_response(404)
+            self.end_headers()
+    
+    def log_message(self, format, *args):
+        pass  # Отключаем логирование
+
+def start_health_server():
+    server = HTTPServer(('0.0.0.0', 8080), HealthHandler)
+    print("✅ Healthcheck сервер запущен на порту 8080")
+    server.serve_forever()
+
+# Запускаем health сервер
+health_thread = threading.Thread(target=start_health_server, daemon=True)
+health_thread.start()
+
+# ==================== ОСНОВНОЙ КОД ====================
+
+import asyncio
+import logging
 from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
 
-# Импорт конфига
 from config import BOT_TOKEN
 
-# Настройка логирования
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
@@ -19,28 +46,6 @@ logger = logging.getLogger(__name__)
 async def main():
     """Основная функция запуска бота"""
     
-    # ==================== HEALTHCHECK СЕРВЕР ====================
-    from aiohttp import web
-    
-    async def health_handler(request):
-        return web.Response(text='OK')
-    
-    async def start_health_server():
-        app = web.Application()
-        app.router.add_get('/health', health_handler)
-        runner = web.AppRunner(app)
-        await runner.setup()
-        site = web.TCPSite(runner, '0.0.0.0', 8080)
-        await site.start()
-        logger.info("✅ Healthcheck сервер запущен на порту 8080")
-        # Бесконечный цикл
-        while True:
-            await asyncio.sleep(3600)
-    
-    # Запускаем health сервер
-    health_task = asyncio.create_task(start_health_server())
-    
-    # ==================== ОСНОВНОЙ КОД БОТА ====================
     logger.info("🚀 Запуск бота...")
     
     # Проверка токена
@@ -96,21 +101,15 @@ async def main():
         logger.error(f"❌ Не удалось получить информацию о боте: {e}")
         return
     
-    # Запуск бота
+    # Запуск бота С drop_pending_updates
     try:
         await bot.delete_webhook(drop_pending_updates=True)
-        await dp.start_polling(bot)
+        await dp.start_polling(bot, drop_pending_updates=True)  # ← ВАЖНО!
+        logger.info("✅ Бот запущен с drop_pending_updates=True")
     except KeyboardInterrupt:
         logger.info("🛑 Бот остановлен")
     except Exception as e:
         logger.error(f"💥 Ошибка при запуске бота: {e}")
-    finally:
-        # Отменяем health task
-        health_task.cancel()
-        try:
-            await health_task
-        except asyncio.CancelledError:
-            pass
 
 if __name__ == "__main__":
     try:
