@@ -12,6 +12,13 @@ from config import ADMIN_IDS
 import database as db
 from subscription_checker import SubscriptionChecker
 
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+
+ADMIN_IDS = os.getenv("ADMIN_IDS")
+
 router = Router()
 logger = logging.getLogger(__name__)
 
@@ -640,4 +647,5 @@ async def find_user_command(message: Message):
             f"/make_publisher {user['user_id']}"
         )
         
+
         await message.answer(response)
