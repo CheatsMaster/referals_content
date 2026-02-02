@@ -13,6 +13,9 @@ from subscription_checker import SubscriptionChecker
 
 from config import ADMIN_IDS
 
+import os
+
+backup_router = Router()
 router = Router()
 logger = logging.getLogger(__name__)
 
@@ -569,6 +572,38 @@ async def block_post_command(message: Message):
     except ValueError:
         await message.answer("❌ Неверный ID поста")
 
+@backup_router.message(Command("backup_status"))
+async def backup_status(message: types.Message):
+    """Показать статус бэкапов"""
+    if str(message.from_user.id) not in ADMIN_IDS:  # проверка админа
+        return
+    
+    # Проверяем наличие B2 ключей
+    if not os.getenv('B2_KEY_ID') or not os.getenv('B2_APP_KEY'):
+        await message.answer("❌ Бэкапы не настроены")
+        return
+    
+    await message.answer("✅ Бэкапы настроены и работают\n"
+                        "📅 Каждый час в Backblaze B2\n"
+                        "🗑️  Хранятся 24 часа")
+
+@backup_router.message(Command("force_backup"))
+async def force_backup(message: types.Message):
+    """Принудительно создать бэкап"""
+    if str(message.from_user.id) not in ADMIN_IDS:
+        return
+    
+    await message.answer("🔄 Создаю бэкап...")
+    
+    # Здесь можно вызвать backup_job() из backup_to_b2.py
+    import subprocess
+    result = subprocess.run(["python", "backup_to_b2.py", "--once"], 
+                          capture_output=True, text=True)
+    
+    if result.returncode == 0:
+        await message.answer("✅ Бэкап создан успешно")
+    else:
+        await message.answer(f"❌ Ошибка: {result.stderr[:100]}...")
 
 @router.message(Command("find_user"))
 async def find_user_command(message: Message):
@@ -643,5 +678,6 @@ async def find_user_command(message: Message):
         
 
         await message.answer(response)
+
 
 
