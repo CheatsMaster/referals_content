@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Telegram Bot - Final Working Version
+Telegram Bot - Final Working Version (Fixed)
 """
 
 import asyncio
@@ -11,20 +11,6 @@ import time
 import signal
 from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
-
-# ==================== ИГНОРИРУЕМ SIGTERM НА ВРЕМЯ ЗАПУСКА ====================
-print("🚀 Игнорирую SIGTERM на 30 секунд для запуска...")
-signal.signal(signal.SIGTERM, signal.SIG_IGN)
-
-# Восстановим обработчик через 30 секунд
-import threading
-def restore_sigterm():
-    time.sleep(30)
-    signal.signal(signal.SIGTERM, signal.SIG_DFL)
-    print("✅ Восстановлена обработка SIGTERM")
-
-sigterm_thread = threading.Thread(target=restore_sigterm, daemon=True)
-sigterm_thread.start()
 
 # ==================== НАСТРОЙКА ЛОГИРОВАНИЯ ====================
 logging.basicConfig(
@@ -111,7 +97,7 @@ async def main():
     print("🤖 ЗАПУСК TELEGRAM БОТА")
     print("=" * 50)
     
-    # Даем время на игнорирование SIGTERM
+    # Даем время на запуск
     print("⏳ Подготовка к запуску...")
     await asyncio.sleep(5)
     
@@ -133,6 +119,7 @@ async def main():
     
     # Запускаем службу бэкапов если есть ключи
     if os.getenv('B2_KEY_ID') and os.getenv('B2_APPLICATION_KEY'):
+        import threading
         start_backup_service()
         print("✅ Служба бэкапов запущена")
     else:
