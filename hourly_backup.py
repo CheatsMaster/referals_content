@@ -30,7 +30,7 @@ def backup():
         # Подключаемся к B2
         s3 = boto3.client(
             's3',
-            endpoint_url='https://s3.us-west-002.backblazeb2.com',
+            endpoint_url='https://s3.us-east-005.backblazeb2.com',
             aws_access_key_id=key_id,
             aws_secret_access_key=app_key
         )
