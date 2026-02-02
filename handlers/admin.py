@@ -11,12 +11,7 @@ import aiosqlite
 import database as db
 from subscription_checker import SubscriptionChecker
 
-import os
-from dotenv import load_dotenv
-
-load_dotenv()
-
-ADMIN_IDS = os.getenv("ADMIN_IDS")
+from config import ADMIN_IDS
 
 router = Router()
 logger = logging.getLogger(__name__)
@@ -648,4 +643,5 @@ async def find_user_command(message: Message):
         
 
         await message.answer(response)
+
 
