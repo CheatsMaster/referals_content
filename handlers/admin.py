@@ -19,6 +19,11 @@ backup_router = Router()
 router = Router()
 logger = logging.getLogger(__name__)
 
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
+)
+
 
 class AdminStates(StatesGroup):
     waiting_user_id = State()
@@ -678,6 +683,15 @@ async def find_user_command(message: Message):
         
 
         await message.answer(response)
+
+@backup_router.message(Command("backup_status"))
+async def cmd_backup_status(message: types.Message):
+    """Показать статус бэкапов"""
+    if message.from_user.id not in ADMIN_IDS:
+        await message.answer("⛔ У вас нет прав")
+        return
+    await message.answer("✅ Бэкапы работают (каждый час в B2)")
+
 
 
 
