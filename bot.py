@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """
-Telegram Bot - Final Working Version (Fixed)
+Telegram Bot - Complete Working Version
+Включает: бота, бэкапы в B2, healthcheck для Railway
 """
 
 import asyncio
 import logging
-import sys
 import os
 import time
-import signal
+import threading
 from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
 
@@ -19,9 +19,42 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# ==================== ПРОСТОЙ БЭКАП В B2 ====================
+# ==================== HEALTHCHECK СЕРВЕР ====================
+def start_simple_healthcheck():
+    """Простой healthcheck сервер для Railway"""
+    from http.server import HTTPServer, BaseHTTPRequestHandler
+    
+    class HealthHandler(BaseHTTPRequestHandler):
+        def do_GET(self):
+            if self.path == '/health':
+                self.send_response(200)
+                self.send_header('Content-type', 'text/plain')
+                self.end_headers()
+                self.wfile.write(b'OK')
+                # Тихий лог для дебага
+                print(f"[Healthcheck] OK - {time.ctime()}")
+            else:
+                self.send_response(404)
+                self.end_headers()
+        
+        def log_message(self, format, *args):
+            pass  # Отключаем стандартное логирование
+    
+    try:
+        server = HTTPServer(('0.0.0.0', 8080), HealthHandler)
+        print("✅ Healthcheck сервер запущен на порту 8080")
+        print("🔗 URL: http://0.0.0.0:8080/health")
+        server.serve_forever()
+    except Exception as e:
+        print(f"❌ Ошибка healthcheck сервера: {e}")
+
+# Запускаем healthcheck сразу при старте
+health_thread = threading.Thread(target=start_simple_healthcheck, daemon=True)
+health_thread.start()
+
+# ==================== БЭКАП СЕРВИС ====================
 def start_backup_service():
-    """Запустить службу бэкапов в отдельном потоке"""
+    """Запустить службу бэкапов в B2"""
     
     def backup_worker():
         """Рабочая функция для бэкапов"""
@@ -30,24 +63,28 @@ def start_backup_service():
         import boto3
         from datetime import datetime
         
-        print("📦 Служба бэкапов запущена")
+        print("📦 Служба бэкапов инициализирована")
+        
+        # Первый бэкап через 5 минут после запуска
+        time.sleep(300)
         
         while True:
             try:
-                # Ждем 1 час между бэкапами
-                time.sleep(3600)
-                
                 # Проверяем есть ли ключи B2
                 key_id = os.getenv('B2_KEY_ID')
                 app_key = os.getenv('B2_APPLICATION_KEY')
                 
                 if not key_id or not app_key:
                     print("⚠️  Бэкапы отключены (нет ключей B2)")
+                    # Ждем час и проверяем снова
+                    time.sleep(3600)
                     continue
                 
                 # Проверяем что БД существует
-                if not os.path.exists('bot_database.db'):
-                    print("⚠️  БД не найдена для бэкапа")
+                db_path = os.getenv('DB_PATH', 'bot_database.db')
+                if not os.path.exists(db_path):
+                    print(f"⚠️  БД не найдена: {db_path}")
+                    time.sleep(3600)
                     continue
                 
                 # Создаем бэкап
@@ -55,8 +92,10 @@ def start_backup_service():
                 backup_name = f'backup_{timestamp}.db.gz'
                 temp_path = f'/tmp/{backup_name}'
                 
+                print(f"🔄 Создаю бэкап: {backup_name}")
+                
                 # Сжимаем БД
-                with open('bot_database.db', 'rb') as f_in:
+                with open(db_path, 'rb') as f_in:
                     with gzip.open(temp_path, 'wb') as f_out:
                         f_out.write(f_in.read())
                 
@@ -72,13 +111,17 @@ def start_backup_service():
                 s3.upload_file(
                     Filename=temp_path,
                     Bucket=bucket,
-                    Key=backup_name
+                    Key=backup_name,
+                    ExtraArgs={'ContentType': 'application/gzip'}
                 )
                 
                 # Удаляем временный файл
                 os.remove(temp_path)
                 
-                print(f"✅ Бэкап создан: {backup_name}")
+                print(f"✅ Бэкап создан и загружен: {backup_name}")
+                
+                # Ждем 1 час до следующего бэкапа
+                time.sleep(3600)
                 
             except Exception as e:
                 print(f"❌ Ошибка бэкапа: {e}")
@@ -97,20 +140,20 @@ async def main():
     print("🤖 ЗАПУСК TELEGRAM БОТА")
     print("=" * 50)
     
-    # Даем время на запуск
-    print("⏳ Подготовка к запуску...")
-    await asyncio.sleep(5)
+    # Даем время healthcheck серверу запуститься
+    print("⏳ Инициализация...")
+    time.sleep(3)
     
     # Импорт конфига
     try:
         from config import BOT_TOKEN
-    except ImportError:
-        logger.error("❌ Не удалось импортировать config.py")
-        print("Создайте файл config.py с BOT_TOKEN")
+    except ImportError as e:
+        logger.error(f"❌ Не удалось импортировать config.py: {e}")
+        print("Убедитесь что файл config.py существует")
         return
     
     # Проверка токена
-    if not BOT_TOKEN or BOT_TOKEN == "ваш_токен_здесь":
+    if not BOT_TOKEN:
         logger.error("❌ BOT_TOKEN не установлен!")
         print("Добавьте BOT_TOKEN в Railway Variables")
         return
@@ -119,11 +162,13 @@ async def main():
     
     # Запускаем службу бэкапов если есть ключи
     if os.getenv('B2_KEY_ID') and os.getenv('B2_APPLICATION_KEY'):
-        import threading
         start_backup_service()
         print("✅ Служба бэкапов запущена")
     else:
         print("⚠️  Бэкапы отключены (нет ключей B2)")
+        print("Добавьте в Railway Variables:")
+        print("  - B2_KEY_ID")
+        print("  - B2_APPLICATION_KEY")
     
     # Создаем бота
     try:
@@ -135,13 +180,12 @@ async def main():
     dp = Dispatcher(storage=MemoryStorage())
     
     # ==================== РЕШЕНИЕ КОНФЛИКТА БОТОВ ====================
-    # Останавливаем все другие экземпляры
-    print("🔄 Сбрасываю старые соединения...")
+    print("🔄 Сбрасываю старые соединения с Telegram...")
     try:
         await bot.delete_webhook(drop_pending_updates=True)
         print("✅ Вебхук сброшен")
-    except:
-        print("⚠️  Не удалось сбросить вебхук")
+    except Exception as e:
+        print(f"⚠️  Не удалось сбросить вебхук: {e}")
     
     # Ждем чтобы старый бот отключился
     print("⏳ Жду 10 секунд чтобы старый бот отключился...")
@@ -172,7 +216,7 @@ async def main():
         
         @dp.message()
         async def echo_handler(message: types.Message):
-            await message.answer(f"Echo: {message.text}")
+            await message.answer(f"Бот работает! Вы написали: {message.text}")
         
         logger.info("✅ Загружен эхо-хендлер")
     
@@ -202,22 +246,27 @@ async def main():
         return
     
     print("=" * 50)
-    print("✅ БОТ УСПЕШНО ЗАПУЩЕН")
+    print("✅ БОТ УСПЕШНО ЗАПУЩЕН И РАБОТАЕТ")
+    print("=" * 50)
+    print("📊 Статус:")
+    print(f"  • Healthcheck: http://0.0.0.0:8080/health")
+    print(f"  • Бэкапы: {'✅ Включены' if os.getenv('B2_KEY_ID') else '❌ Выключены'}")
+    print(f"  • Бот: @{bot_info.username}")
     print("=" * 50)
     
     # Основной цикл бота
     try:
-        print("🔄 Запуск polling...")
+        print("🔄 Запуск polling (основной цикл бота)...")
         await dp.start_polling(bot, drop_pending_updates=True)
     except KeyboardInterrupt:
         print("\n🛑 Бот остановлен пользователем")
     except Exception as e:
-        logger.error(f"💥 Ошибка при запуске бота: {e}")
+        logger.error(f"💥 Ошибка при работе бота: {e}")
         print(f"💥 Критическая ошибка: {e}")
 
 # ==================== ЗАПУСК ПРИЛОЖЕНИЯ ====================
 if __name__ == "__main__":
-    print("🚀 Начинаю запуск приложения...")
+    print("🚀 Запуск приложения...")
     
     try:
         asyncio.run(main())
