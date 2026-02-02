@@ -1,7 +1,6 @@
 # ДОБАВЬТЕ ЭТО ПЕРЕД ВСЕМ
 import sys
 import os
-from aiogram import types
 
 import asyncio
 import logging
@@ -63,6 +62,7 @@ if __name__ == "__main__":
         logger.info("Бот остановлен")
     except Exception as e:
         logger.error(f"Ошибка при запуске бота: {e}")
+
 
 
 
