@@ -1,66 +1,91 @@
-# ДОБАВЬТЕ ЭТО ПЕРЕД ВСЕМ
+import asyncio
+import logging
 import sys
 import os
 
-import asyncio
-import logging
-from aiogram import Bot, Dispatcher, Router
+# Импорт aiogram
+from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
-from aiogram.filters import Command
 
-from config import BOT_TOKEN, ADMIN_IDS, GLOBAL_CHANNEL, DB_PATH
+# Импорт конфига
+from config import BOT_TOKEN
 
-logger = logging.getLogger(__name__)
-
+# Настройка логирования
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
 )
+logger = logging.getLogger(__name__)
 
 async def main():
     """Основная функция запуска бота"""
     
     logger.info("🚀 Запуск бота...")
     
+    # Проверка токена
+    if not BOT_TOKEN:
+        logger.error("❌ BOT_TOKEN не установлен!")
+        return
+    
     # Создаем бота
     bot = Bot(token=BOT_TOKEN)
     dp = Dispatcher(storage=MemoryStorage())
     
-    # Регистрируем роутеры (только если backup_router определен)
-    try:
-        dp.include_router(backup_router)
-    except NameError:
-        logger.warning("⚠️  backup_router не определен, пропускаем")
-    
     # Инициализация базы данных
-    from database import init_db
-    await init_db()
-    logger.info("База данных инициализирована")
+    try:
+        from database import init_db
+        await init_db()
+        logger.info("✅ База данных инициализирована")
+    except Exception as e:
+        logger.error(f"❌ Ошибка инициализации БД: {e}")
+        return
     
     # Импорт хендлеров
-    from handlers import user, publisher, admin
-    
-    # Регистрация роутеров
-    dp.include_router(admin.router)
-    dp.include_router(publisher.router)
-    dp.include_router(user.router)
+    try:
+        from handlers import user, publisher, admin
+        
+        # Регистрация роутеров
+        dp.include_router(admin.router)
+        dp.include_router(publisher.router)
+        dp.include_router(user.router)
+        logger.info("✅ Хендлеры загружены")
+    except ImportError as e:
+        logger.error(f"❌ Ошибка импорта хендлеров: {e}")
+        return
+    except AttributeError as e:
+        logger.error(f"❌ Ошибка в хендлерах: {e}")
+        return
     
     # Настройка команд бота
-    await bot.set_my_commands([
-        {"command": "start", "description": "Запустить бота"},
-        {"command": "profile", "description": "Мой профиль"},
-        {"command": "subscribe", "description": "Купить подписку"},
-        {"command": "help", "description": "Помощь"},
-        {"command": "status", "description": "Проверить статус"},
-        {"command": "check_channel", "description": "Проверить канал"},
-    ])
+    try:
+        await bot.set_my_commands([
+            {"command": "start", "description": "Запустить бота"},
+            {"command": "profile", "description": "Мой профиль"},
+            {"command": "subscribe", "description": "Купить подписку"},
+            {"command": "help", "description": "Помощь"},
+            {"command": "status", "description": "Проверить статус"},
+            {"command": "check_channel", "description": "Проверить канал"},
+        ])
+        logger.info("✅ Команды бота настроены")
+    except Exception as e:
+        logger.warning(f"⚠️  Не удалось настроить команды: {e}")
     
-    bot_info = await bot.get_me()
-    logger.info(f"Бот @{bot_info.username} запускается...")
+    # Получаем информацию о боте
+    try:
+        bot_info = await bot.get_me()
+        logger.info(f"🤖 Бот @{bot_info.username} запущен")
+    except Exception as e:
+        logger.error(f"❌ Не удалось получить информацию о боте: {e}")
+        return
     
     # Запуск бота
-    await bot.delete_webhook(drop_pending_updates=True)
-    await dp.start_polling(bot)
+    try:
+        await bot.delete_webhook(drop_pending_updates=True)
+        await dp.start_polling(bot)
+    except KeyboardInterrupt:
+        logger.info("🛑 Бот остановлен")
+    except Exception as e:
+        logger.error(f"💥 Ошибка при запуске бота: {e}")
 
 if __name__ == "__main__":
     try:
@@ -69,8 +94,3 @@ if __name__ == "__main__":
         logger.info("Бот остановлен")
     except Exception as e:
         logger.error(f"Ошибка при запуске бота: {e}")
-
-
-
-
-
