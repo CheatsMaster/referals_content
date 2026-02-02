@@ -45,7 +45,7 @@ def simple_backup():
             import boto3
             s3 = boto3.client(
                 's3',
-                endpoint_url='https://s3.us-west-002.backblazeb2.com',
+                endpoint_url='https://s3.us-east-005.backblazeb2.com',
                 aws_access_key_id=os.getenv('B2_KEY_ID'),
                 aws_secret_access_key=os.getenv('B2_APPLICATION_KEY')
             )
@@ -107,7 +107,6 @@ async def main():
             {"command": "subscribe", "description": "Купить подписку"},
             {"command": "help", "description": "Помощь"},
             {"command": "status", "description": "Проверить статус"},
-            {"command": "check_channel", "description": "Проверить канал"},
         ])
         logger.info("✅ Команды бота настроены")
     except Exception as e:
@@ -142,3 +141,4 @@ if __name__ == "__main__":
         logger.info("Бот остановлен")
     except Exception as e:
         logger.error(f"Ошибка при запуске бота: {e}")
+
