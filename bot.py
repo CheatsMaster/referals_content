@@ -1,48 +1,68 @@
 import asyncio
 import logging
-import sys
 import threading
-from http.server import HTTPServer, BaseHTTPRequestHandler
-
-# Простой HTTP сервер для healthcheck
-class HealthHandler(BaseHTTPRequestHandler):
-    def do_GET(self):
-        if self.path == '/health':
-            self.send_response(200)
-            self.send_header('Content-type', 'text/plain')
-            self.end_headers()
-            self.wfile.write(b'OK')
-        else:
-            self.send_response(404)
-            self.end_headers()
-    
-    def log_message(self, format, *args):
-        pass  # Отключаем логирование
-
-def start_health_server():
-    server = HTTPServer(('0.0.0.0', 8080), HealthHandler)
-    print("✅ Healthcheck сервер запущен на порту 8080")
-    server.serve_forever()
-
-# Запускаем health сервер
-health_thread = threading.Thread(target=start_health_server, daemon=True)
-health_thread.start()
-
-# ==================== ОСНОВНОЙ КОД ====================
-
-import asyncio
-import logging
+import time
+import os
 from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
 
 from config import BOT_TOKEN
 
+# Настройка логирования
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
 )
 logger = logging.getLogger(__name__)
 
+# ==================== ПРОСТОЙ БЭКАП ====================
+def simple_backup():
+    """Простой бэкап раз в час"""
+    import sqlite3
+    import gzip
+    from datetime import datetime
+    
+    while True:
+        try:
+            # Ждем час
+            time.sleep(3600)
+            
+            # Проверяем есть ли ключи B2
+            if not os.getenv('B2_KEY_ID') or not os.getenv('B2_APPLICATION_KEY'):
+                logger.info("⚠️  Бэкапы отключены (нет ключей B2)")
+                continue
+            
+            # Делаем бэкап
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            backup_name = f'backup_{timestamp}.db.gz'
+            
+            # Создаем сжатый бэкап
+            with open('bot_database.db', 'rb') as f_in:
+                with gzip.open(f'/tmp/{backup_name}', 'wb') as f_out:
+                    f_out.write(f_in.read())
+            
+            # Загружаем в B2
+            import boto3
+            s3 = boto3.client(
+                's3',
+                endpoint_url='https://s3.us-west-002.backblazeb2.com',
+                aws_access_key_id=os.getenv('B2_KEY_ID'),
+                aws_secret_access_key=os.getenv('B2_APPLICATION_KEY')
+            )
+            
+            s3.upload_file(
+                Filename=f'/tmp/{backup_name}',
+                Bucket=os.getenv('B2_BUCKET', 'referals-content'),
+                Key=backup_name
+            )
+            
+            logger.info(f"📦 Бэкап создан: {backup_name}")
+            
+        except Exception as e:
+            logger.error(f"❌ Ошибка бэкапа: {e}")
+            time.sleep(300)  # ждем 5 минут при ошибке
+
+# ==================== ОСНОВНОЙ БОТ ====================
 async def main():
     """Основная функция запуска бота"""
     
@@ -101,11 +121,15 @@ async def main():
         logger.error(f"❌ Не удалось получить информацию о боте: {e}")
         return
     
-    # Запуск бота С drop_pending_updates
+    # Запускаем бэкап-сервис в фоне
+    backup_thread = threading.Thread(target=simple_backup, daemon=True)
+    backup_thread.start()
+    logger.info("✅ Служба бэкапов запущена (раз в час)")
+    
+    # Запуск бота
     try:
         await bot.delete_webhook(drop_pending_updates=True)
-        await dp.start_polling(bot, drop_pending_updates=True)  # ← ВАЖНО!
-        logger.info("✅ Бот запущен с drop_pending_updates=True")
+        await dp.start_polling(bot, drop_pending_updates=True)
     except KeyboardInterrupt:
         logger.info("🛑 Бот остановлен")
     except Exception as e:
