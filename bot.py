@@ -60,8 +60,7 @@ def start_backup_service():
         
         print("📦 Служба бэкапов инициализирована")
         
-        # Первый бэкап через 5 минут после запуска
-        time.sleep(300)
+        time.sleep(60)
         
         while True:
             try:
@@ -97,7 +96,7 @@ def start_backup_service():
                 # Загружаем в B2
                 s3 = boto3.client(
                     's3',
-                    endpoint_url='https://s3.us-west-002.backblazeb2.com',
+                    endpoint_url='https://s3.us-east-005.backblazeb2.com',
                     aws_access_key_id=key_id,
                     aws_secret_access_key=app_key
                 )
@@ -273,4 +272,5 @@ if __name__ == "__main__":
         traceback.print_exc()
     
     print("\n👋 Завершение работы...")
+
 
