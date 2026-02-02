@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from aiogram import Bot, Dispatcher
+from aiogram import Bot, Dispatcher, types
 from aiogram.fsm.storage.memory import MemoryStorage
 from config import BOT_TOKEN
 
@@ -54,5 +54,6 @@ if __name__ == "__main__":
     except Exception as e:
 
         logger.error(f"Ошибка при запуске бота: {e}")
+
 
 
