@@ -8,7 +8,6 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 import aiosqlite
 
-from config import ADMIN_IDS
 import database as db
 from subscription_checker import SubscriptionChecker
 
@@ -649,3 +648,4 @@ async def find_user_command(message: Message):
         
 
         await message.answer(response)
+
