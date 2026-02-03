@@ -196,9 +196,15 @@ async def handle_post_access_for_user(bot: Bot, user_id: int, chat_id: int, uniq
 
 async def show_subscription_request_for_user(bot: Bot, chat_id: int, user_id: int, channel: str, unique_code: str):
     """Запрос на подписку для конкретного пользователя"""
+    # Убираем @ из channel для callback_data, чтобы избежать проблем с _
+    channel_for_callback = channel[1:] if channel.startswith("@") else channel
+    
+    # Используем другой разделитель вместо _ для channel
+    callback_data = f"check_sub:{unique_code}:{channel_for_callback}"
+    
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="📢 Подписаться на канал", url=f"https://t.me/{channel[1:]}")],
-        [InlineKeyboardButton(text="✅ Проверить подписку", callback_data=f"check_sub_{unique_code}_{channel}")]
+        [InlineKeyboardButton(text="✅ Проверить подписку", callback_data=callback_data)]
     ])
     
     await bot.send_message(
@@ -312,18 +318,29 @@ async def show_post_content_for_user(bot: Bot, chat_id: int, post: dict):
             text="❌ Произошла ошибка при показе контента"
         )
 
-@router.callback_query(F.data.startswith("check_sub_"))
+@router.callback_query(F.data.startswith("check_sub:"))
 async def check_single_subscription(callback: CallbackQuery):
     """Проверка подписки на один канал"""
     try:
-        # Формат: check_sub_{unique_code}_{channel}
-        parts = callback.data.split("_")
-        if len(parts) < 4:
+        # Формат: check_sub:{unique_code}:{channel}
+        # Используем ":" как разделитель, так как channel может содержать "_"
+        
+        # Убираем префикс "check_sub:"
+        data_without_prefix = callback.data[10:]  # "check_sub:" имеет длину 10 символов
+        
+        # Разделяем по ":"
+        parts = data_without_prefix.split(":", 2)  # Разделяем максимум на 3 части
+        
+        if len(parts) < 2:
             await callback.answer("❌ Ошибка в данных кнопки")
             return
         
-        unique_code = parts[2]
-        channel = parts[3]  # Получаем канал из callback_data
+        unique_code = parts[0]
+        channel = parts[1]
+        
+        # Добавляем @ если его нет
+        if not channel.startswith("@"):
+            channel = f"@{channel}"
         
         logger.info(f"=== check_single_subscription ===")
         logger.info(f"Пользователь (callback.from_user.id): {callback.from_user.id}")
@@ -348,7 +365,6 @@ async def check_single_subscription(callback: CallbackQuery):
         
         if is_subscribed:
             # Если подписан, проверяем весь пост
-            # Для этого создаем правильное сообщение
             await handle_post_access_for_user(
                 bot=callback.bot,
                 user_id=callback.from_user.id,
