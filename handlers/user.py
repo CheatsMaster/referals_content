@@ -6,7 +6,7 @@ from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKe
 from aiogram.filters import CommandStart, Command
 from aiogram.exceptions import TelegramAPIError
 
-from config import GLOBAL_CHANNEL, TARIFFS
+from config import TARIFFS
 import database as db
 from subscription_checker import SubscriptionChecker
 
@@ -116,29 +116,29 @@ async def handle_post_access_for_user(bot: Bot, user_id: int, chat_id: int, uniq
     checker = SubscriptionChecker(bot)
     
     # Проверяем подписку на глобальный канал
-    if GLOBAL_CHANNEL:
-        logger.info(f"Проверка глобального канала {GLOBAL_CHANNEL} для user_id={user_id}")
+    #if GLOBAL_CHANNEL:
+        #logger.info(f"Проверка глобального канала {GLOBAL_CHANNEL} для user_id={user_id}")
         
-        is_subscribed, error_msg = await checker.check_user_subscription(
-            user_id, 
-            GLOBAL_CHANNEL
-        )
+        #is_subscribed, error_msg = await checker.check_user_subscription(
+            #user_id, 
+            #GLOBAL_CHANNEL
+        #)
         
-        logger.info(f"Глобальная проверка: subscribed={is_subscribed}, error={error_msg}")
+        #logger.info(f"Глобальная проверка: subscribed={is_subscribed}, error={error_msg}")
         
-        if not is_subscribed:
-            logger.info(f"Пользователь НЕ подписан на глобальный канал")
-            await bot.send_message(chat_id, f"⚠️ {error_msg}")
-            await show_subscription_request_for_user(
-                bot=bot,
-                chat_id=chat_id,
-                user_id=user_id,
-                channel=GLOBAL_CHANNEL,
-                unique_code=unique_code
-            )
-            return
-        else:
-            logger.info(f"✅ Пользователь подписан на глобальный канал")
+        #if not is_subscribed:
+            #logger.info(f"Пользователь НЕ подписан на глобальный канал")
+            #await bot.send_message(chat_id, f"⚠️ {error_msg}")
+            #await show_subscription_request_for_user(
+                #bot=bot,
+                #chat_id=chat_id,
+                #user_id=user_id,
+                #channel=GLOBAL_CHANNEL,
+                #unique_code=unique_code
+            #)
+            #return
+        #else:
+            #logger.info(f"✅ Пользователь подписан на глобальный канал")
     
     # Проверяем подписки на каналы разместителя
     channels = json.loads(post['channels']) if post['channels'] else []
@@ -810,12 +810,20 @@ async def subscribe_command(message: Message):
     
     await message.answer(
         "💰 Выберите тариф подписки:\n\n"
-        "🟢 Базовая - 100 руб (10 кредитов)\n"
-        "🔵 Стандартная - 250 руб (30 кредитов)\n"
-        "🟣 Премиум - 500 руб (70 кредитов)\n\n"
-        "💎 Кредиты используются для создания постов.\n"
-        "1 кредит = 1 канал в посте.\n\n"
-        "💡 При покупке подписки вы автоматически становитесь разместителем!",
+        "🟢 Базовая - 100 руб\n"
+        "• 10 кредитов\n"
+        "• Создание до 10 постов\n\n"
+        "🔵 Стандартная - 250 руб\n"
+        "• 30 кредитов\n"
+        "• Создание до 30 постов\n"
+        "• Приоритетная поддержка\n\n"
+        "🟣 Премиум - 500 руб\n"
+        "• 70 кредитов\n"
+        "• Создание до 70 постов\n"
+        "• VIP поддержка\n"
+        "• Статистика по постам\n\n"
+        "💎 1 кредит = 1 канал в посте\n\n\n"
+        "В данный момент пополнение кредитов осуществляется через владельца @SMEPTHbIE",
         reply_markup=keyboard
     )
 
