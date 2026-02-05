@@ -103,6 +103,9 @@ async def process_content(message: Message, state: FSMContext):
     await message.answer(
         "✅ Контент сохранен!\n\n"
         "📢 Теперь отправьте каналы для подписки (по одному в строке):\n"
+        "→ Вариант 1: Без проверки подписки\n"
+        "• Просто отправьте /done\n\n"
+        "→ Вариант 2: С проверкой подписки\n"
         "• @channel1\n"
         "• @channel2\n\n"
         "❌ Отправьте /skip если каналы не нужны\n"
@@ -129,7 +132,10 @@ async def done_channels(message: Message, state: FSMContext):
 async def process_channels(message: Message, state: FSMContext):
     """Обработка добавления каналов"""
     if not message.text.startswith("@"):
-        await message.answer("❌ Канал должен начинаться с @ (например: @channel_name)")
+        await message.answer(
+            "❌ Канал должен начинаться с @ (например: @channel_name)\n\n"
+            "Или отправьте /done для создания поста без каналов"
+        )
         return
     
     channel = message.text.strip()
@@ -147,16 +153,16 @@ async def process_channels(message: Message, state: FSMContext):
             f"Что сделать:\n"
             f"1. Добавьте бота как администратора в {channel}\n"
             f"2. Дайте права на постинг сообщений\n"
-            f"3. Проверьте командой /check_channel {channel}"
+            f"3. Проверьте командой /check_channel {channel}\n\n"
+            f"Или отправьте /done для создания поста без каналов"
         )
         return
     
     # 2. ТЕСТИРУЕМ проверку подписки на себе
     await message.answer(f"🔍 Тестируем проверку подписок в {channel}...")
     
-    # ИСПРАВЛЕНИЕ: передаем правильный user_id
     test_result, test_error = await checker.check_user_subscription(
-        message.from_user.id,  # Правильный ID пользователя
+        message.from_user.id,
         channel
     )
     
@@ -168,7 +174,8 @@ async def process_channels(message: Message, state: FSMContext):
             f"1. Зайдите в настройки канала {channel}\n"
             f"2. Права администратора → Ваш бот\n"
             f"3. Включите 'Может видеть участников'\n"
-            f"4. Попробуйте снова"
+            f"4. Попробуйте снова\n\n"
+            f"Или отправьте /done для создания поста без каналов"
         )
         return
     
@@ -180,11 +187,22 @@ async def process_channels(message: Message, state: FSMContext):
     else:
         channels.append(channel)
         await state.update_data(channels=channels)
-        await message.answer(
-            f"✅ Канал добавлен: {channel}\n"
-            f"📊 Всего каналов: {len(channels)}\n\n"
-            "Добавьте еще канал или отправьте /done"
-        )
+        
+        if len(channels) == 1:
+            await message.answer(
+                f"✅ Канал добавлен: {channel}\n\n"
+                f"💡 Теперь пользователи должны будут подписаться на этот канал, чтобы увидеть контент.\n\n"
+                f"📊 Всего каналов: {len(channels)}\n"
+                f"💰 Будет списано кредитов: {len(channels)}\n\n"
+                f"Добавьте еще канал или отправьте /done"
+            )
+        else:
+            await message.answer(
+                f"✅ Канал добавлен: {channel}\n"
+                f"📊 Всего каналов: {len(channels)}\n"
+                f"💰 Будет списано кредитов: {len(channels)}\n\n"
+                f"Добавьте еще канал или отправьте /done"
+            )
 
 
 async def finish_post_creation(message: Message, state: FSMContext):
@@ -199,14 +217,18 @@ async def finish_post_creation(message: Message, state: FSMContext):
         await state.clear()
         return
     
-    # Проверяем баланс пользователя
+    # Проверяем баланс пользователя только если есть каналы
     user = await db.get_user(message.from_user.id)
-    if user['credits'] < len(channels):
+    
+    if channels and user['credits'] < len(channels):
         await message.answer(
             f"❌ Недостаточно кредитов!\n"
             f"💰 Нужно: {len(channels)} кредитов\n"
             f"💎 У вас: {user['credits']} кредитов\n\n"
-            f"Купите кредиты командой /subscribe"
+            f"Что можно сделать:\n"
+            f"1. Купите кредиты командой /subscribe\n"
+            f"2. Создайте пост без каналов (отправьте /done без каналов)\n"
+            f"3. Уменьшите количество каналов"
         )
         await state.clear()
         return
@@ -221,33 +243,64 @@ async def finish_post_creation(message: Message, state: FSMContext):
         channels=channels
     )
     
-    # Списываем кредиты
-    await db.add_credits(message.from_user.id, -len(channels))
+    # Списываем кредиты только если есть каналы
+    if channels:
+        await db.add_credits(message.from_user.id, -len(channels))
+        credits_used = len(channels)
+    else:
+        credits_used = 0
     
     # Формируем ссылку
     bot_username = (await message.bot.get_me()).username
     post_url = f"https://t.me/{bot_username}?start={unique_code}"
     short_url = f"t.me/{bot_username}?start={unique_code}"
     
-    await message.answer(
-        f"🎉 Пост '{post_name}' успешно создан!\n\n"
-        f"🔗 Ссылка на пост:\n"
-        f"👉 {post_url}\n\n"
-        f"📎 Короткая ссылка:\n"
-        f"👉 {short_url}\n\n"
-        f"📊 Детали:\n"
-        f"• Каналов: {len(channels)}\n"
-        f"• Списано кредитов: {len(channels)}\n"
-        f"• Осталось кредитов: {user['credits'] - len(channels)}"
-    )
+    # Формируем сообщение в зависимости от наличия каналов
+    if channels:
+        message_text = (
+            f"🎉 <b>Пост '{post_name}' успешно создан!</b>\n\n"
+            f"🔗 <b>Ссылка на пост:</b>\n"
+            f"👉 {post_url}\n\n"
+            f"📎 <b>Короткая ссылка:</b>\n"
+            f"👉 {short_url}\n\n"
+            f"📊 <b>Детали:</b>\n"
+            f"• Каналов для подписки: {len(channels)}\n"
+            f"• Списано кредитов: {credits_used}\n"
+            f"• Осталось кредитов: {user['credits'] - credits_used}\n\n"
+            f"🔐 <b>Требуется подписка:</b> ДА\n"
+            f"👤 Пользователи должны подписаться на все указанные каналы"
+        )
+    else:
+        message_text = (
+            f"🎉 <b>Пост '{post_name}' успешно создан!</b>\n\n"
+            f"🔗 <b>Ссылка на пост:</b>\n"
+            f"👉 {post_url}\n\n"
+            f"📎 <b>Короткая ссылка:</b>\n"
+            f"👉 {short_url}\n\n"
+            f"📊 <b>Детали:</b>\n"
+            f"• Каналов для подписки: НЕТ\n"
+            f"• Списано кредитов: {credits_used}\n"
+            f"• Осталось кредитов: {user['credits'] - credits_used}\n\n"
+            f"🔓 <b>Требуется подписка:</b> НЕТ\n"
+            f"👤 Контент доступен сразу всем пользователям"
+        )
     
-    # Показываем информацию о каналах
+    await message.answer(message_text, parse_mode="HTML")
+    
+    # Показываем информацию о каналах, если они есть
     if channels:
         channels_list = "\n".join([f"• {channel}" for channel in channels])
         await message.answer(
-            f"📢 Каналы для подписки:\n\n"
+            f"📢 <b>Каналы для подписки:</b>\n\n"
             f"{channels_list}\n\n"
-            f"✅ Бот проверен на права администратора во всех каналах"
+            f"✅ Бот проверен на права администратора во всех каналах",
+            parse_mode="HTML"
+        )
+    else:
+        await message.answer(
+            f"💡 <b>Это пост без обязательной подписки.</b>\n\n"
+            f"Пользователи смогут сразу увидеть контент без проверки подписок.\n"
+            f"Идеально для бесплатного контента или пробных материалов."
         )
     
     await state.clear()
@@ -271,68 +324,120 @@ async def my_posts_command(message: Message):
         )
         return
     
-    await message.answer(f"📚 Ваши посты ({len(posts)}):")
+    # Статистика по типам постов
+    total_posts = len(posts)
+    posts_with_channels = 0
+    posts_without_channels = 0
+    total_views = 0
+    total_subscribers = 0
     
     for post in posts:
         channels = json.loads(post['channels']) if post['channels'] else []
-        status = "🟢 Активен" if post['is_active'] else "🔴 Неактивен"
+        if channels:
+            posts_with_channels += 1
+        else:
+            posts_without_channels += 1
         
-        # Создаем клавиатуру для поста
-        builder = InlineKeyboardBuilder()
-        
-        # Основные кнопки
-        builder.add(InlineKeyboardButton(
-            text="👀 Просмотры", 
-            callback_data=f"post_stats_{post['id']}"
-        ))
-        builder.add(InlineKeyboardButton(
-            text="✏️ Обновить", 
-            callback_data=f"update_post_{post['id']}"
-        ))
-        
-        # Кнопки управления
-        builder.add(InlineKeyboardButton(
-            text="🚫/✅" if post['is_active'] else "✅/🚫", 
-            callback_data=f"toggle_my_post_{post['id']}"
-        ))
-        builder.add(InlineKeyboardButton(
-            text="📋 Подписчики", 
-            callback_data=f"post_subscribers_{post['id']}"
-        ))
-        
-        builder.adjust(2, 2)  # 2 кнопки в ряд
-        
-        # Формируем ссылку
-        bot_username = (await message.bot.get_me()).username
-        post_url = f"t.me/{bot_username}?start={post['unique_code']}"
-        
-        # Формируем сообщение
-        post_info = (
-            f"📝 <b>{post.get('post_name', 'Без названия')}</b>\n\n"
-            f"🆔 Код: <code>{post['unique_code']}</code>\n"
-            f"🔗 Ссылка: {post_url}\n"
-            f"👀 Просмотров: {post['views']}\n"
-            f"👥 Подписчиков: {post.get('subscribers_count', 0)}\n"
-            f"📢 Каналов: {len(channels)}\n"
-            f"📅 Создан: {post['created_at']}\n"
-            f"📊 Статус: {status}\n"
-        )
-        
-        await message.answer(post_info, reply_markup=builder.as_markup(), parse_mode="HTML")
+        total_views += post['views']
+        total_subscribers += post.get('subscribers_count', 0)
     
-    # Кнопка обновить весь список
-    refresh_keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🔄 Обновить список", callback_data="refresh_my_posts")]
+    await message.answer(
+        f"📚 <b>Ваши посты</b> ({total_posts}):\n\n"
+        f"📊 <b>Статистика:</b>\n"
+        f"• 🔐 Постов с подпиской: {posts_with_channels}\n"
+        f"• 🔓 Постов без подписки: {posts_without_channels}\n"
+        f"• 👀 Всего просмотров: {total_views}\n"
+        f"• 👥 Подписчиков на обновления: {total_subscribers}\n\n"
+        f"<i>Прокрутите ниже чтобы увидеть все посты ↓</i>",
+        parse_mode="HTML"
+    )
+    
+    # Показываем посты постранично (по 5 на страницу)
+    posts_per_page = 5
+    
+    for i in range(0, len(posts), posts_per_page):
+        page_posts = posts[i:i + posts_per_page]
+        
+        for post in page_posts:
+            channels = json.loads(post['channels']) if post['channels'] else []
+            status = "🟢 Активен" if post['is_active'] else "🔴 Неактивен"
+            
+            # Определяем тип поста
+            if channels:
+                post_type = "🔐 Требует подписки"
+                channels_info = f"📢 Каналов: {len(channels)}"
+                post_emoji = "🔒"
+            else:
+                post_type = "🔓 Без подписки"
+                channels_info = "📢 Каналов: НЕТ"
+                post_emoji = "🔓"
+            
+            # Создаем клавиатуру для поста
+            builder = InlineKeyboardBuilder()
+            
+            # Основные кнопки
+            builder.add(InlineKeyboardButton(
+                text="👀 Просмотры", 
+                callback_data=f"post_stats_{post['id']}"
+            ))
+            builder.add(InlineKeyboardButton(
+                text="✏️ Обновить", 
+                callback_data=f"update_post_{post['id']}"
+            ))
+            
+            # Кнопки управления
+            builder.add(InlineKeyboardButton(
+                text="🚫/✅" if post['is_active'] else "✅/🚫", 
+                callback_data=f"toggle_my_post_{post['id']}"
+            ))
+            builder.add(InlineKeyboardButton(
+                text="📋 Подписчики", 
+                callback_data=f"post_subscribers_{post['id']}"
+            ))
+            
+            builder.adjust(2, 2)  # 2 кнопки в ряд
+            
+            # Формируем ссылку
+            bot_username = (await message.bot.get_me()).username
+            post_url = f"t.me/{bot_username}?start={post['unique_code']}"
+            
+            # Формируем сообщение
+            post_info = (
+                f"{post_emoji} <b>{post.get('post_name', 'Без названия')}</b>\n"
+                f"📊 Тип: {post_type}\n\n"
+                f"🆔 Код: <code>{post['unique_code']}</code>\n"
+                f"🔗 Ссылка: {post_url}\n"
+                f"👀 Просмотров: {post['views']}\n"
+                f"👥 Подписчиков: {post.get('subscribers_count', 0)}\n"
+                f"{channels_info}\n"
+                f"📅 Создан: {post['created_at'][:16]}\n"
+                f"📊 Статус: {status}\n"
+            )
+            
+            await message.answer(post_info, reply_markup=builder.as_markup(), parse_mode="HTML")
+    
+    # Кнопка обновить весь список и навигация
+    navigation_keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(text="🔄 Обновить список", callback_data="refresh_my_posts"),
+            InlineKeyboardButton(text="📝 Новый пост", callback_data="create_post_now")
+        ],
+        [
+            InlineKeyboardButton(text="💰 Пополнить кредиты", callback_data="buy_subscription"),
+            InlineKeyboardButton(text="📊 Общая статистика", callback_data="my_stats")
+        ]
     ])
     
     await message.answer(
         "💡 <b>Управление постами:</b>\n\n"
-        "• <b>👀 Просмотры</b> - детальная статистика\n"
+        "• <b>👀 Просмотры</b> - детальная статистика поста\n"
         "• <b>✏️ Обновить</b> - изменить контент поста\n"
         "• <b>🚫/✅</b> - активировать/деактивировать пост\n"
         "• <b>📋 Подписчики</b> - список подписчиков на обновления\n\n"
+        "🔐 <b>Посты с подпиской</b> - требуют подписки на каналы\n"
+        "🔓 <b>Посты без подписки</b> - доступны сразу всем\n\n"
         "Нажмите 🔄 чтобы обновить список",
-        reply_markup=refresh_keyboard,
+        reply_markup=navigation_keyboard,
         parse_mode="HTML"
     )
 
@@ -634,3 +739,84 @@ async def refresh_my_posts(callback: CallbackQuery):
     except Exception as e:
         logger.error(f"Ошибка в refresh_my_posts: {e}")
         await callback.answer("❌ Ошибка обновления")
+
+@router.callback_query(F.data == "my_stats")
+async def my_stats_callback(callback: CallbackQuery):
+    """Общая статистика пользователя"""
+    user = await db.get_user(callback.from_user.id)
+    
+    if not user or user['role'] not in ['publisher', 'admin']:
+        await callback.answer("❌ У вас нет прав разместителя")
+        return
+    
+    posts = await db.get_user_posts_with_stats(callback.from_user.id)
+    
+    # Статистика
+    total_posts = len(posts)
+    posts_with_channels = 0
+    posts_without_channels = 0
+    total_views = 0
+    total_subscribers = 0
+    total_channels = 0
+    active_posts = 0
+    
+    for post in posts:
+        channels = json.loads(post['channels']) if post['channels'] else []
+        if channels:
+            posts_with_channels += 1
+            total_channels += len(channels)
+        else:
+            posts_without_channels += 1
+        
+        total_views += post['views']
+        total_subscribers += post.get('subscribers_count', 0)
+        
+        if post['is_active']:
+            active_posts += 1
+    
+    # Средние значения
+    avg_views = total_views // max(total_posts, 1)
+    avg_subscribers = total_subscribers // max(total_posts, 1)
+    
+    stats_text = (
+        f"📊 <b>Ваша общая статистика:</b>\n\n"
+        f"👤 <b>Профиль:</b>\n"
+        f"• Имя: {user['full_name']}\n"
+        f"• Роль: Разместитель\n"
+        f"• Кредитов: {user['credits']}\n\n"
+        
+        f"📝 <b>Посты:</b>\n"
+        f"• Всего постов: {total_posts}\n"
+        f"• Активных: {active_posts}\n"
+        f"• Неактивных: {total_posts - active_posts}\n"
+        f"• С подпиской: {posts_with_channels}\n"
+        f"• Без подписки: {posts_without_channels}\n\n"
+        
+        f"📈 <b>Эффективность:</b>\n"
+        f"• Всего просмотров: {total_views}\n"
+        f"• Всего подписчиков: {total_subscribers}\n"
+        f"• Всего каналов: {total_channels}\n"
+        f"• Средние просмотры: {avg_views} на пост\n"
+        f"• Средние подписчики: {avg_subscribers} на пост\n\n"
+        
+        f"💡 <b>Рекомендации:</b>\n"
+    )
+    
+    if posts_with_channels == 0:
+        stats_text += "• Попробуйте создать пост с подпиской для монетизации\n"
+    elif posts_without_channels == 0:
+        stats_text += "• Создайте бесплатный пост для привлечения аудитории\n"
+    
+    if avg_views < 10:
+        stats_text += "• Улучшите описание и заголовки постов\n"
+    
+    if total_subscribers == 0:
+        stats_text += "• Добавьте кнопку подписки на обновления в посты\n"
+    
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🔙 Назад к списку", callback_data="refresh_my_posts")],
+        [InlineKeyboardButton(text="📝 Создать пост", callback_data="create_post_now")]
+    ])
+    
+    await callback.message.answer(stats_text, reply_markup=keyboard, parse_mode="HTML")
+    await callback.answer()

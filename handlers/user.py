@@ -113,81 +113,64 @@ async def handle_post_access_for_user(bot: Bot, user_id: int, chat_id: int, uniq
         await bot.send_message(chat_id, "❌ Этот пост временно недоступен")
         return
     
-    checker = SubscriptionChecker(bot)
-    
-    # Проверяем подписку на глобальный канал
-    #if GLOBAL_CHANNEL:
-        #logger.info(f"Проверка глобального канала {GLOBAL_CHANNEL} для user_id={user_id}")
-        
-        #is_subscribed, error_msg = await checker.check_user_subscription(
-            #user_id, 
-            #GLOBAL_CHANNEL
-        #)
-        
-        #logger.info(f"Глобальная проверка: subscribed={is_subscribed}, error={error_msg}")
-        
-        #if not is_subscribed:
-            #logger.info(f"Пользователь НЕ подписан на глобальный канал")
-            #await bot.send_message(chat_id, f"⚠️ {error_msg}")
-            #await show_subscription_request_for_user(
-                #bot=bot,
-                #chat_id=chat_id,
-                #user_id=user_id,
-                #channel=GLOBAL_CHANNEL,
-                #unique_code=unique_code
-            #)
-            #return
-        #else:
-            #logger.info(f"✅ Пользователь подписан на глобальный канал")
-    
-    # Проверяем подписки на каналы разместителя
+    # Проверяем каналы для подписки
     channels = json.loads(post['channels']) if post['channels'] else []
     
-    if channels:
-        logger.info(f"Проверка каналов разместителя: {channels}")
+    # Если каналов нет - сразу показываем контент
+    if not channels:
+        logger.info(f"✅ Пост без каналов - показываем контент сразу")
+        await bot.send_message(chat_id, "✅ Контент доступен без подписки!")
+        await db.increment_post_views(post['id'])
+        await show_post_content_for_user(bot, chat_id, post, user_id)
+        return
+    
+    # Если есть каналы - проверяем подписки
+    checker = SubscriptionChecker(bot)
+    
+    logger.info(f"Проверка каналов разместителя: {channels}")
+    
+    await bot.send_message(chat_id, f"🔍 Проверяем подписки на {len(channels)} канал(ов)...")
+    
+    results = await checker.check_multiple_subscriptions(user_id, channels)
+    
+    # Собираем неподписанные каналы
+    not_subscribed_channels = []
+    all_subscribed = True
+    
+    for channel, (is_subscribed, error_msg) in results.items():
+        await db.update_subscription(user_id, channel, is_subscribed)
         
-        await bot.send_message(chat_id, f"🔍 Проверяем подписки на {len(channels)} канал(ов)...")
-        
-        results = await checker.check_multiple_subscriptions(user_id, channels)
-        
-        # Собираем неподписанные каналы
-        not_subscribed_channels = []
-        all_subscribed = True
-        
-        for channel, (is_subscribed, error_msg) in results.items():
-            await db.update_subscription(user_id, channel, is_subscribed)
-            
-            if not is_subscribed:
-                all_subscribed = False
-                not_subscribed_channels.append(channel)
-                logger.info(f"❌ Пользователь НЕ подписан на {channel}")
-                await bot.send_message(chat_id, f"❌ {error_msg}")
-            else:
-                logger.info(f"✅ Пользователь подписан на {channel}")
-        
-        if not all_subscribed:
-            logger.info(f"Пользователь не прошел проверку, каналы: {not_subscribed_channels}")
-            
-            if len(not_subscribed_channels) == 1:
-                await show_subscription_request_for_user(
-                    bot=bot,
-                    chat_id=chat_id,
-                    user_id=user_id,
-                    channel=not_subscribed_channels[0],
-                    unique_code=unique_code
-                )
-            else:
-                await show_channels_subscription_request_for_user(
-                    bot=bot,
-                    chat_id=chat_id,
-                    user_id=user_id,
-                    channels=not_subscribed_channels,
-                    unique_code=unique_code
-                )
-            return
+        if not is_subscribed:
+            all_subscribed = False
+            not_subscribed_channels.append(channel)
+            logger.info(f"❌ Пользователь НЕ подписан на {channel}")
+            await bot.send_message(chat_id, f"❌ {error_msg}")
         else:
-            logger.info(f"✅ Все проверки пройдены")
-            await bot.send_message(chat_id, "✅ Все подписки подтверждены")
+            logger.info(f"✅ Пользователь подписан на {channel}")
+    
+    if not all_subscribed:
+        logger.info(f"Пользователь не прошел проверку, каналы: {not_subscribed_channels}")
+        
+        if len(not_subscribed_channels) == 1:
+            await show_subscription_request_for_user(
+                bot=bot,
+                chat_id=chat_id,
+                user_id=user_id,
+                channel=not_subscribed_channels[0],
+                unique_code=unique_code
+            )
+        else:
+            await show_channels_subscription_request_for_user(
+                bot=bot,
+                chat_id=chat_id,
+                user_id=user_id,
+                channels=not_subscribed_channels,
+                unique_code=unique_code
+            )
+        return
+    else:
+        logger.info(f"✅ Все проверки пройдены")
+        await bot.send_message(chat_id, "✅ Все подписки подтверждены")
     
     # Все проверки пройдены - показываем контент
     logger.info(f"Показ контента для пользователя {user_id}")
